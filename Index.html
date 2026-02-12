@@ -1,42 +1,91 @@
-// Add these to your HTML <head>:
-// <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
-// <script src="https://unpkg.com/p5.plotsvg@1.0.1/lib/p5.plotSvg.js"></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Triton Plotter Designer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://unpkg.com/p5.plotsvg@1.0.1/lib/p5.plotSvg.js"></script>
+    <style>
+        body { margin: 0; padding: 0; background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; }
+        #controls { position: absolute; bottom: 0; width: 100%; background: rgba(0,0,0,0.8); padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px; border-top: 1px solid #444; }
+        .slider-row { display: flex; align-items: center; justify-content: space-between; }
+        input[type=range] { width: 65%; }
+        button { background: #007AFF; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; width: 100%; }
+        button:active { background: #0056b3; }
+        label { font-size: 14px; width: 30%; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="slider-row">
+            <label>Complexity</label>
+            <input type="range" id="density" min="5" max="100" value="20">
+        </div>
+        <div class="slider-row">
+            <label>Geometry</label>
+            <input type="range" id="sides" min="3" max="12" value="6" step="1">
+        </div>
+        <div class="slider-row">
+            <label>Rotation</label>
+            <input type="range" id="twist" min="0" max="5" value="1" step="0.1">
+        </div>
+        <button onclick="downloadSVG()">EXPORT SVG FOR PLOTTER</button>
+    </div>
 
-let density = 10;
+    <script>
+        let densitySlider, sidesSlider, twistSlider;
 
-function setup() {
-  // Set canvas to phone screen size
-  createCanvas(windowWidth, windowHeight - 100, SVG); 
-  
-  // Create a slider for your iPhone screen
-  slider = createSlider(1, 50, 10);
-  slider.position(20, height + 20);
-  slider.style('width', '80%');
-}
+        function setup() {
+            // Create a canvas that leaves room for controls
+            let canvas = createCanvas(windowWidth, windowHeight - 180, SVG);
+            canvas.parent(document.body);
+            
+            densitySlider = document.getElementById('density');
+            sidesSlider = document.getElementById('sides');
+            twistSlider = document.getElementById('twist');
+            
+            noFill();
+            strokeWeight(1);
+        }
 
-function draw() {
-  clear();
-  noFill();
-  stroke(0);
-  
-  density = slider.value();
-  let centerX = width / 2;
-  let centerY = height / 2;
+        function draw() {
+            clear();
+            background(26); // Dark background for viewing
+            stroke(255);    // White lines for viewing
+            
+            let d = parseInt(densitySlider.value);
+            let s = parseInt(sidesSlider.value);
+            let t = parseFloat(twistSlider.value);
+            
+            translate(width / 2, height / 2);
 
-  // Example: Generative Sacred Geometry (Concentric Polygons)
-  for (let i = 0; i < density; i++) {
-    let radius = i * 15;
-    beginShape();
-    for (let a = 0; a < TWO_PI; a += TWO_PI / 6) {
-      let x = centerX + cos(a + i * 0.1) * radius;
-      let y = centerY + sin(a + i * 0.1) * radius;
-      vertex(x, y);
-    }
-    endShape(CLOSE);
-  }
-}
+            // Generative Loop: Recursive Polygons
+            for (let i = 0; i < d; i++) {
+                let radius = i * (width / (d * 1.5));
+                push();
+                rotate(i * t * 0.1);
+                
+                beginShape();
+                for (let a = 0; a < TWO_PI; a += TWO_PI / s) {
+                    let sx = cos(a) * radius;
+                    let sy = sin(a) * radius;
+                    vertex(sx, sy);
+                }
+                endShape(CLOSE);
+                pop();
+            }
+        }
 
-// iPhone Interaction: Save SVG on double tap
-function doubleClicked() {
-  saveSVG("my_generative_art.svg");
-}
+        function downloadSVG() {
+            // When exporting, switch to black lines for the plotter
+            stroke(0);
+            saveSVG("Triton_Design.svg");
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight - 180);
+        }
+    </script>
+</body>
+</html>
