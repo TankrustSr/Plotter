@@ -1,0 +1,42 @@
+// Add these to your HTML <head>:
+// <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+// <script src="https://unpkg.com/p5.plotsvg@1.0.1/lib/p5.plotSvg.js"></script>
+
+let density = 10;
+
+function setup() {
+  // Set canvas to phone screen size
+  createCanvas(windowWidth, windowHeight - 100, SVG); 
+  
+  // Create a slider for your iPhone screen
+  slider = createSlider(1, 50, 10);
+  slider.position(20, height + 20);
+  slider.style('width', '80%');
+}
+
+function draw() {
+  clear();
+  noFill();
+  stroke(0);
+  
+  density = slider.value();
+  let centerX = width / 2;
+  let centerY = height / 2;
+
+  // Example: Generative Sacred Geometry (Concentric Polygons)
+  for (let i = 0; i < density; i++) {
+    let radius = i * 15;
+    beginShape();
+    for (let a = 0; a < TWO_PI; a += TWO_PI / 6) {
+      let x = centerX + cos(a + i * 0.1) * radius;
+      let y = centerY + sin(a + i * 0.1) * radius;
+      vertex(x, y);
+    }
+    endShape(CLOSE);
+  }
+}
+
+// iPhone Interaction: Save SVG on double tap
+function doubleClicked() {
+  saveSVG("my_generative_art.svg");
+}
