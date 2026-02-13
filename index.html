@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Triton Studio v5 (Seed)</title>
+    <style>
+        body { margin: 0; background: #000; color: #0f0; font-family: monospace; overflow: hidden; touch-action: none; }
+        canvas { display: block; background: #111; border-bottom: 1px solid #333; }
+        
+        #controls { 
+            position: absolute; bottom: 0; width: 100%; height: 320px;
+            background: rgba(15, 15, 15, 0.98); padding: 15px; 
+            box-sizing: border-box; display: flex; flex-direction: column; 
+            gap: 12px; border-top: 1px solid #444; 
+        }
+
+        .mode-select { display: flex; gap: 5px; margin-bottom: 5px; }
+        .mode-btn {
+            background: #222; color: #666; border: 1px solid #444;
+            padding: 10px 5px; flex: 1; font-size: 11px; cursor: pointer; text-transform: uppercase;
+        }
+        .mode-btn.active { background: #0f0; color: #000; border-color: #0f0; font-weight: bold; }
+
+        .slider-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+        input[type=range] { flex-grow: 1; margin: 0 10px; accent-color: #0f0; height: 30px; }
+        
+        /* New Button Row Layout */
+        .action-row { display: flex; gap: 10px; margin-top: auto; }
+        
+        .action-btn { 
+            background: #222; color: #0f0; border: 1px solid #0f0; 
+            padding: 15px; border-radius: 4px; font-weight: bold; font-size: 14px; flex: 1;
+        }
+        .action-btn:active { background: #0f0; color: #000; }
+        
+        /* Make the Seed button slightly different style */
+        #seedBtn { border-style: dashed; color: #aaa; border-color: #666; }
+        #seedBtn:active { background: #444; color: #fff; }
+
+        label { width: 60px; text-transform: uppercase; color: #aaa; font-weight: bold;}
+    </style>
+</head>
+<body>
+
+    <canvas id="plotCanvas"></canvas>
+
+    <div id="controls">
+        <div class="mode-select">
+            <button class="mode-btn active" onclick="setMode('triton')">TRITON</button>
+            <button class="mode-btn" onclick="setMode('maurer')">MAURER</button>
+            <button class="mode-btn" onclick="setMode('waves')">WAVES</button>
+            <button class="mode-btn" onclick="setMode('phyllo')">PHYLLO</button>
+        </div>
+
+        <div class="slider-row">
+            <label id="lbl1">LAYERS</label>
+            <input type="range" id="val1" min="1" max="100" value="50" oninput="draw()">
+        </div>
+        <div class="slider-row">
+            <label id="lbl2">SIDES</label>
+            <input type="range" id="val2" min="1" max="100" value="50" oninput="draw()">
+        </div>
+        <div class="slider-row">
+            <label id="lbl3">TWIST</label>
+            <input type="range" id="val3" min="1" max="100" value="50" oninput="draw()">
+        </div>
+
+        <div class="action-row">
+            <button id="seedBtn" class="action-btn" onclick="newSeed()">NEW SEED</button>
+            <button id="exportBtn" class="action-btn" onclick="downloadSVG()">EXPORT SVG</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('plotCanvas');
+        const ctx = canvas.getContext('2d');
+        let currentMode = 'triton';
+        let globalRotation = 0; // For rotating non-random modes
+
+        // --- PERLIN NOISE ---
+        const Perlin = {
+            grad3: [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]],
+            p: [], perm: [],
+            init: function() {
+                this.p = []; for (let i=0; i<256; i++) this.p[i] = Math.floor(Math.random()*256);
+                this.perm = []; for(let i=0; i<512; i++) this.perm[i]=this.p[i & 255];
+            },
+            dot: function(g, x, y) { return g[0]*x + g[1]*y; },
+            mix: function(a, b, t) { return (1-t)*a + t*b; },
+            fade: function(t) { return t*t*t*(t*(t*6-15)+10); },
+            noise: function(x, y) {
+                let X = Math.floor(x), Y = Math.floor(y);
+                x = x - X; y = y - Y;
+                X = X & 255; Y = Y & 255;
+                let gi00 = this.perm[X+this.perm[Y]] % 12,
+                    gi01 = this.perm[X+this.perm[Y+1]] % 12,
+                    gi10 = this.perm[X+1+this.perm[Y]] % 12,
+                    gi11 = this.perm[X+1+this.perm[Y+1]] % 12;
+                let n00 = this.dot(this.grad3[gi00], x, y),
+                    n01 = this.dot(this.grad3[gi01], x, y-1),
+                    n10 = this.dot(this.grad3[gi10], x-1, y),
+                    n11 = this.dot(this.grad3[gi11], x-1, y-1);
+                let u = this.fade(x), v = this.fade(y);
+                return this.mix(this.mix(n00, n10, u), this.mix(n01, n11, u), v);
+            }
+        };
+        Perlin.init();
+
+        const configs = {
+            triton: { l1:"LAYERS", l2:"SIDES", l3:"TWIST", v1:40, v2:6, v3:50 },
+            maurer: { l1:"PETALS", l2:"CONNECT",l3:"SCALE", v1:60, v2:29, v3:100 },
+            waves:  { l1:"DENSITY",l2:"ZOOM",   l3:"HEIGHT", v1:90, v2:25, v3:60 },
+            phyllo: { l1:"SEEDS",  l2:"GROWTH", l3:"ZOOM",  v1:80, v2:50, v3:30 }
+        };
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            const c = configs[mode];
+            document.getElementById('lbl1').innerText = c.l1;
+            document.getElementById('lbl2').innerText = c.l2;
+            document.getElementById('lbl3').innerText = c.l3;
+            
+            document.getElementById('val1').value = c.v1;
+            document.getElementById('val2').value = c.v2;
+            document.getElementById('val3').value = c.v3;
+
+            if(mode === 'waves') {
+                Perlin.init();
+            } else {
+                globalRotation = 0; // Reset rotation for geo modes
+            }
+            draw();
+        }
+
+        // --- NEW VARIATION LOGIC ---
+        function newSeed() {
+            if(currentMode === 'waves') {
+                // Re-shuffle the Perlin noise for terrain
+                Perlin.init();
+            } else {
+                // For geometric modes, random rotation provides "variation"
+                globalRotation = Math.random() * Math.PI * 2;
+            }
+            draw();
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight - 320;
+            draw();
+        }
+        window.addEventListener('resize', resize);
+
+        function getPoints(w, h) {
+            const v1 = parseInt(document.getElementById('val1').value);
+            const v2 = parseInt(document.getElementById('val2').value);
+            const v3 = parseInt(document.getElementById('val3').value);
+            
+            const shapes = [];
+            const cx = w/2; const cy = h/2;
+            const minDim = Math.min(cx, cy) - 20;
+
+            if (currentMode === 'triton') {
+                const layers = Math.max(2, v1); 
+                const sides = Math.max(3, Math.floor(v2 / 8)); 
+                const twist = (v3 - 50) * 0.05;
+                for (let i = 0; i < layers; i++) {
+                    const r = (i + 1) * (minDim / layers);
+                    const rot = (i * twist) + globalRotation; // Apply global seed
+                    const layerPts = [];
+                    for (let a = 0; a <= sides; a++) {
+                        const angle = (a * 2 * Math.PI / sides) + rot;
+                        layerPts.push({ x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r });
+                    }
+                    shapes.push(layerPts);
+                }
+            } 
+            else if (currentMode === 'maurer') {
+                const n = Math.floor(v1 / 10) || 1; 
+                const d = Math.floor(v2 * 1.5) || 1; 
+                const scale = (v3 / 100) * minDim;
+                const line = [];
+                for (let i = 0; i <= 360; i++) {
+                    const k = i * d * (Math.PI / 180);
+                    const r = scale * Math.sin(n * k);
+                    // Rotate point by globalRotation
+                    const xRaw = r * Math.cos(k);
+                    const yRaw = r * Math.sin(k);
+                    line.push({ 
+                        x: cx + (xRaw * Math.cos(globalRotation) - yRaw * Math.sin(globalRotation)), 
+                        y: cy + (xRaw * Math.sin(globalRotation) + yRaw * Math.cos(globalRotation))
+                    });
+                }
+                shapes.push(line);
+            }
+            else if (currentMode === 'waves') {
+                // Max lines ~320
+                const lines = Math.floor(v1 * 3) + 20; 
+                
+                const zoomMin = 0.002;
+                const zoomMax = 0.03;
+                const zoomFactor = zoomMin + (v2 / 100) * (zoomMax - zoomMin);
+
+                const amp = (v3 / 100) * (h / 2.5);
+                const margin = 20;
+                const stepY = (h - margin * 2) / lines;
+                const horizon = new Array(Math.ceil(w)).fill(h); 
+
+                for (let i = 0; i < lines; i++) {
+                    const yBase = h - margin - i * stepY;
+                    let currentLine = [];
+                    for (let x = margin; x < w - margin; x += 1) {
+                        const distToCenter = 1 - Math.pow(Math.abs((x - cx) / cx), 2.5);
+                        const n = Perlin.noise(x * zoomFactor, i * 0.08); 
+                        const yOffset = n * amp * distToCenter;
+                        const y = yBase - yOffset;
+                        
+                        if (y < horizon[Math.floor(x)] - 0.5) { 
+                            currentLine.push({x: x, y: y});
+                            horizon[Math.floor(x)] = y; 
+                        } else {
+                            if (currentLine.length > 0) {
+                                shapes.push(currentLine);
+                                currentLine = [];
+                            }
+                        }
+                    }
+                    if (currentLine.length > 0) shapes.push(currentLine);
+                }
+            }
+            else if (currentMode === 'phyllo') {
+                const count = v1 * 5; 
+                const divergence = 137.5; 
+                const space = (v3 / 100) * 8 + 2; 
+                const growth = v2 / 50; 
+                for (let i = 1; i < count; i++) {
+                    // Add global rotation
+                    const angle = i * (divergence * Math.PI / 180) + globalRotation;
+                    const r = space * Math.sqrt(i);
+                    const x = cx + Math.cos(angle) * r;
+                    const y = cy + Math.sin(angle) * r;
+                    if (x < 10 || x > w-10 || y < 10 || y > h-10) break;
+                    const seedSize = 1 + (i * growth * 0.1);
+                    const seed = [];
+                    for(let s=0; s<=6; s++) {
+                        const sa = s * 2 * Math.PI / 6;
+                        seed.push({ x: x + Math.cos(sa) * seedSize, y: y + Math.sin(sa) * seedSize });
+                    }
+                    shapes.push(seed);
+                }
+            }
+            return shapes;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#0f0';
+            const v1 = parseInt(document.getElementById('val1').value);
+            ctx.lineWidth = currentMode === 'waves' && v1 > 60 ? 0.6 : 1.2;
+            
+            const shapes = getPoints(canvas.width, canvas.height);
+            shapes.forEach(shape => {
+                ctx.beginPath();
+                shape.forEach((p, i) => {
+                    if (i === 0) ctx.moveTo(p.x, p.y);
+                    else ctx.lineTo(p.x, p.y);
+                });
+                ctx.stroke();
+            });
+        }
+
+        function downloadSVG() {
+            const w = 1000; const h = 1000;
+            const shapes = getPoints(w, h);
+            
+            let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`;
+            svg += `<rect width="100%" height="100%" fill="none"/>`; 
+            
+            shapes.forEach(shape => {
+                let d = "";
+                shape.forEach((p, i) => d += (i===0 ? "M " : " L ") + `${p.x.toFixed(2)} ${p.y.toFixed(2)}`);
+                if(currentMode === 'phyllo') d += " Z";
+                svg += `<path d="${d}" fill="none" stroke="black" stroke-width="0.5"/>`;
+            });
+            svg += `</svg>`;
+
+            const blob = new Blob([svg], {type: "image/svg+xml"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `triton_${currentMode}_${Math.floor(Math.random()*1000)}.svg`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // Init
+        setMode('waves');
+        resize();
+    </script>
+</body>
+</html>
